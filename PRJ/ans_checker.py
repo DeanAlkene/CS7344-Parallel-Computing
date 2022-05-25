@@ -10,17 +10,31 @@ def wordcount_checker(path, path_gt):
             if d.get(sl[0]) is not None:
                 raise KeyError("Duplicate key!")
             d[sl[0]] = int(int(sl[1].strip()))
+            
+    d_res = {}
     
     with open(path, "rb") as f:
         ls = f.readlines()
         for l in ls:
             sl = l.split(b' ')
-            val = d.get(sl[0])
-            if val is None:
-                raise KeyError("%s not exist!"%(sl[0]))
-            if val != int(int(sl[1].strip())):
-                raise ValueError("%s has wrong count!"%(sl[0]))
-            d.pop(sl[0])
+            if d_res.get(sl[0]) is not None:
+                raise KeyError("Duplicate key!")
+            d_res[sl[0]] = int(int(sl[1].strip()))
+    
+    for key in d_res.keys():
+        val = d.get(key)
+        if val is None:
+            raise KeyError("%s not exist!"%(key))
+        if val != d_res[key]:
+            raise ValueError("%s has wrong count!"%(key))
+        d.pop(key)
+        
+    if len(d) != 0:
+        raise ValueError("Key numbers are not equal")
+    
+    # if d != d_res:
+    #     raise ValueError("Dicts are not equal")
+    
     print("Success!")
 
 def wordcount_checker_shuffle(name, path_gt, reduce_p):
@@ -54,6 +68,7 @@ def wordcount_checker_shuffle(name, path_gt, reduce_p):
         
     if len(d) != 0:
         raise ValueError("Key numbers are not equal")
+    
     # if d != d_res:
     #     raise ValueError("Dicts are not equal")
     
@@ -147,8 +162,8 @@ def avgpooling_checker(path_f, path_C, kernel_size, stride, dtype):
     
     print("Success!")
 
-# wordcount_checker("wordcount_small.txt", "wordcount_small_gt.txt")
+wordcount_checker("wordcount_big.txt", "wordcount_big_gt.txt")
 # wordcount_checker_shuffle("wordcount_big", "wordcount_big_gt.txt", 4)
-gemm_checker("mat_A", "mat_B", "C", np.float64)
-conv_checker("mat_A", "kernel", "Conv", [1, 1], np.float64)
-avgpooling_checker("mat_A", "AvgPooling", [4, 4], [1, 1], np.float64)
+# gemm_checker("mat_A", "mat_B", "C", np.float64)
+# conv_checker("mat_A", "kernel", "Conv", [1, 1], np.float64)
+# avgpooling_checker("mat_A", "AvgPooling", [4, 4], [1, 1], np.float64)

@@ -167,10 +167,11 @@ void map_small(int id, int p, int n, char* path, struct HashTable** htable) {
         fclose(f);
 
         read_buf[total_size] = '\0';
+        // word = strtok(read_buf, " ,.-\n:!?()';\"\t\r");
         word = strtok(read_buf, " \t\r\n");
         while (word != NULL) {
             add_word_count(*htable, word, 1);
-            // word = strtok(NULL, " !?:,.\r\n");
+            // word = strtok(NULL, " ,.-\n:!?()';\"\t\r");
             word = strtok(NULL, " \t\r\n");
         }
         free(word);
@@ -229,11 +230,11 @@ void map_big(int id, int p, char* path, struct HashTable** htable) {
     (*htable)->htable = (struct Node**)malloc(HTABLE_SIZE * sizeof(struct Node*));
     memset((*htable)->htable, 0, HTABLE_SIZE * sizeof(struct Node*));
     // count (map + combine)
-    // word = strtok(in_buf, " !?:,.\r\n");
+    // word = strtok(in_buf, " ,.-\n:!?()';\"\t\r");
     word = strtok(in_buf, " \t\r\n");
     while (word != NULL) {
         add_word_count(*htable, word, 1);
-        // word = strtok(NULL, " !?:,.\r\n");
+        // word = strtok(NULL, " ,.-\n:!?()';\"\t\r");
         word = strtok(NULL, " \t\r\n");
     }
     free(word);
@@ -413,10 +414,72 @@ void reduce_with_shuffle(int id, int p, int reduce_p, struct HashTable* htable, 
     free(send_disp);
 }
 
+void reduce_multi_stage(int id, int p, struct HashTable* htable, int mode) {
+    struct WordCount *in_buf, *out_buf;
+    int i, send_size, recv_size;
+    int participants, cur_part;
+    MPI_Status status;
+
+    int blocks[2] = {1, WORD_LEN};
+    MPI_Datatype types[2] = {MPI_INT, MPI_CHAR};
+    MPI_Aint disp[2];
+    MPI_Datatype wc_type;
+    MPI_Aint lb, int_ext;
+
+    MPI_Type_get_extent(MPI_INT, &lb, &int_ext);
+    disp[0] = (MPI_Aint)0;
+    disp[1] = int_ext;
+    MPI_Type_create_struct(2, blocks, disp, types, &wc_type);
+    MPI_Type_commit(&wc_type);
+
+    participants = p;
+    while (participants > 1) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        cur_part = participants / 2 + (participants % 2);
+        if (id < cur_part) {
+            if (id + cur_part < participants) {
+                MPI_Probe(id + cur_part, WORD_COUNT_TAG, MPI_COMM_WORLD, &status);
+                MPI_Get_count(&status, wc_type, &recv_size);
+                in_buf = (struct WordCount*)malloc(recv_size * sizeof(struct WordCount));
+                MPI_Recv(in_buf, recv_size, wc_type, status.MPI_SOURCE, WORD_COUNT_TAG, MPI_COMM_WORLD, &status);
+                reduce_inner(htable, in_buf, recv_size);
+                free(in_buf);
+            }
+        }
+        if (id >= cur_part && id < participants) {
+            out_buf = (struct WordCount*)malloc(htable->size * sizeof(struct WordCount));
+            serialize(htable, &out_buf);
+            MPI_Send(out_buf, htable->size, wc_type, id - cur_part, WORD_COUNT_TAG, MPI_COMM_WORLD);
+            free(out_buf);
+        }
+        participants = cur_part;
+    }
+
+    if (!id) {
+        if (mode == 0) {
+            write_file(htable, "wordcount_small.txt");
+        } else {
+            write_file(htable, "wordcount_big.txt");
+        }
+    }
+    
+    clear_htable(htable);
+    free(htable);
+}
+
 void word_count_small(int id, int p, int reduce_p, char *path, int n) {
     struct HashTable* htable;
+
+    if (n < p) {
+        if (!id) printf("Too many processors!\n");
+        MPI_Finalize();
+        exit(1);
+    }
+
     map_small(id, p, n, path, &htable);
-    if (reduce_p == 1) {
+    if (reduce_p == 0) {
+        reduce_multi_stage(id, p, htable, 0);
+    } else if (reduce_p == 1) {
         reduce(id, p, htable, 0);
     } else {
         reduce_with_shuffle(id, p, reduce_p, htable, 0);
@@ -426,7 +489,9 @@ void word_count_small(int id, int p, int reduce_p, char *path, int n) {
 void word_count_big(int id, int p, int reduce_p, char *path) {
     struct HashTable* htable;
     map_big(id, p, path, &htable);
-    if (reduce_p == 1) {
+    if (reduce_p == 0) {
+        reduce_multi_stage(id, p, htable, 1);
+    } else if (reduce_p == 1) {
         reduce(id, p, htable, 1);
     } else {
         reduce_with_shuffle(id, p, reduce_p, htable, 1);
@@ -458,8 +523,8 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
     reduce_p = atoi(argv[2]);
-    if (reduce_p < 1 || reduce_p > p) {
-        if (!id) printf("1 <= num_reducer <= p\n");
+    if (reduce_p < 0 || reduce_p > p) {
+        if (!id) printf("1 <= num_reducer <= p, 0 for multi-stage reduction\n");
         MPI_Finalize();
         exit(1);
     }
