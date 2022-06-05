@@ -6,14 +6,14 @@
 #include <time.h>
 
 int main(int argc, char *argv[]) {
-    int tn;
-    int i;
-    double x, y;
-    int count;
-    int samples;
-    double pi;
-    unsigned int seed;
-    double elapsed_time;
+    int tn;                 /* Number of threads */
+    int i;                  /* Loop index */
+    double x, y;            /* Sample point (x, y) */
+    int count;              /* Count of points inside the 1/4 circle */
+    int samples;            /* Total number of sample points */
+    double pi;              /* Estimation of pi */
+    unsigned int seed;      /* Random seed */
+    double elapsed_time;    /* Elapsed time */
 
     if (argc != 3) {
         printf("Command line: %s <num_threads> <samples>\n", argv[0]);
@@ -29,21 +29,24 @@ int main(int argc, char *argv[]) {
     elapsed_time -= omp_get_wtime();
     #pragma omp parallel private(seed)
     {
-        seed = omp_get_thread_num() * (unsigned int)time(NULL);
+        // seed = omp_get_thread_num() * (unsigned int)time(NULL);
+        // fixed seed
+        seed = omp_get_thread_num();
         #pragma omp for private(x, y) reduction(+:count)
         for (i = 0; i < samples; ++i) {
             x = (double)rand_r(&seed) / RAND_MAX;
             y = (double)rand_r(&seed) / RAND_MAX;
+            // check and count
             if (x*x + y*y <= 1) {
                 count++;
             }
         }
     }
+    pi = 4 * (double)count / samples;
     elapsed_time += omp_get_wtime();
 
-    pi = 4 * (double)count / samples;
     printf("Pi: %f\n", pi);
-    printf("Elapsed time: %f\n", elapsed_time);
+    printf("Elapsed time: %10.3f ms\n", elapsed_time * 1000);
 
     return 0;
 }

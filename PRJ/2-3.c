@@ -51,6 +51,7 @@ void construct_graph(struct Node** graph, int n) {
             out_degree = rand_r(&seed) % max_od + 1;
             (*graph)[i].out_degree = out_degree;
             (*graph)[i].edge_list = (int *)malloc(out_degree * sizeof(int));
+            // generate edges without duplication
             for (j = 0; j < out_degree; ++j) {
                 v = rand_r(&seed) % n;
                 for (k = 0; k < j; ++k) {
@@ -74,18 +75,18 @@ void do_page_rank_single(struct Node* graph, int n, int iterations) {
     for (i = 0; i < iterations; ++i) {
         memset(sum_arr, 0, n * sizeof(double));
         for (j = 0; j < n; ++j) {
+            // accumulate PageRank of successors
             pr = graph[j].page_rank / graph[j].out_degree;
             for (k = 0; k < graph[j].out_degree; ++k) {
                 sum_arr[graph[j].edge_list[k]] += pr;
             }
         }
-
+        // update PageRank
         for (j = 0; j < n; ++j) {
             graph[j].page_rank = 1 - DAMPING_FACTOR + DAMPING_FACTOR * sum_arr[j];
         }
     }
 
-    write_page_rank(graph, n);
     free(sum_arr);
 }
 
@@ -96,17 +97,24 @@ void do_page_rank(struct Node* graph, int n, int iterations) {
 
     sum_arr = (double *)malloc(n * sizeof(double));
     for (i = 0; i < iterations; ++i) {
-        memset(sum_arr, 0, n * sizeof(double));
+        // memset(sum_arr, 0, n * sizeof(double));
         #pragma omp parallel
-        {
+        {   
+            #pragma omp for
+            for (j = 0; j < n; ++j) {
+                sum_arr[j] = 0.0;
+            }
+            // #pragma omp for private(k, pr)
             #pragma omp for reduction(+:sum_arr[:n]) private(k, pr)
             for (j = 0; j < n; ++j) {
+                // accumulate PageRank of successors in parallel
                 pr = graph[j].page_rank / graph[j].out_degree;
                 for (k = 0; k < graph[j].out_degree; ++k) {
+                    // #pragma omp atomic
                     sum_arr[graph[j].edge_list[k]] += pr;
                 }
             }
-
+            // update PageRank in parallel
             #pragma omp for
             for (j = 0; j < n; ++j) {
                 graph[j].page_rank = 1 - DAMPING_FACTOR + DAMPING_FACTOR * sum_arr[j];
@@ -114,7 +122,6 @@ void do_page_rank(struct Node* graph, int n, int iterations) {
         }
     }
 
-    write_page_rank(graph, n);
     free(sum_arr);
 }
 
@@ -127,11 +134,11 @@ void clear_graph(struct Node* graph, int n) {
 }
 
 int main(int argc, char *argv[]) {
-    int tn;
-    int n;
-    int iterations;
-    struct Node* graph;
-    double elapsed_time;
+    int tn;                 /* Number of threads */
+    int n;                  /* Number of nodes */
+    int iterations;         /* Total iterations */
+    struct Node* graph;     /* The graph */
+    double elapsed_time;    /* Elapsed time */
 
     if (argc != 4) {
         printf("Command line: %s <num_threads> <nodes> <iters>\n", argv[0]);
@@ -142,6 +149,7 @@ int main(int argc, char *argv[]) {
     n = atoi(argv[2]);
     iterations = atoi(argv[3]);
     omp_set_num_threads(tn);
+    // generate a graph randomly
     construct_graph(&graph, n);
     // print_graph(graph, n);
     elapsed_time = 0.0;
@@ -149,7 +157,9 @@ int main(int argc, char *argv[]) {
     // do_page_rank_single(graph, n, iterations);
     do_page_rank(graph, n, iterations);
     elapsed_time += omp_get_wtime();
-    printf("Elapsed time: %f\n", elapsed_time);
+    printf("Elapsed time: %10.3f ms\n", elapsed_time * 1000);
+
+    write_page_rank(graph, n);
     clear_graph(graph, n);
     return 0;
 }

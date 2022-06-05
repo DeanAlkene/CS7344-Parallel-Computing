@@ -155,15 +155,15 @@ def avgpooling_checker(path_f, path_C, kernel_size, stride, dtype):
     if C_gt.shape[0] != m_C or C_gt.shape[1] != n_C:
         raise ValueError("Wrong result shape")
 
-    delta = np.abs((C.astype(cmp_dtype) - C_gt.numpy())) < 1e-9
+    delta = np.abs((C.astype(cmp_dtype) - C_gt.numpy().astype(dtype).astype(cmp_dtype))) < 1e-9
         
     if not delta.all():
         raise ValueError("Wrong result")
     
     print("Success!")
 
-wordcount_checker("wordcount_big.txt", "wordcount_big_gt.txt")
+# wordcount_checker("wordcount_big.txt", "wordcount_big_gt.txt")
 # wordcount_checker_shuffle("wordcount_big", "wordcount_big_gt.txt", 4)
-# gemm_checker("mat_A", "mat_B", "C", np.float64)
+gemm_checker("mat_A", "mat_B", "C", np.float64)
 # conv_checker("mat_A", "kernel", "Conv", [1, 1], np.float64)
 # avgpooling_checker("mat_A", "AvgPooling", [4, 4], [1, 1], np.float64)

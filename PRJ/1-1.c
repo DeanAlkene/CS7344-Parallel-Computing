@@ -5,14 +5,14 @@
 #include <string.h>
 
 int My_Allgather(const void *sendbuf, int sendcount, MPI_Datatype sendtype, void *recvbuf, int recvcount, MPI_Datatype recvtype, MPI_Comm comm) { 
-    int id;
-    int p;
-    int i;
-    int ret;
-    int type_size;
-    MPI_Request* send_requests;
-    MPI_Request* recv_requests;
-    MPI_Status* status;
+    int id;                      /* Process rank */
+    int p;                       /* Number of processes */
+    int i;                       /* Loop index */
+    int ret;                     /* Return value */
+    int type_size;               /* Size of recv type */
+    MPI_Request* send_requests;  /* Array of send requests */
+    MPI_Request* recv_requests;  /* Array of recv requests */
+    MPI_Status* status;          /* send/recv status */
     MPI_Comm_rank(MPI_COMM_WORLD, &id);
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     send_requests = (MPI_Request *)malloc(p * sizeof(MPI_Request));
@@ -21,14 +21,18 @@ int My_Allgather(const void *sendbuf, int sendcount, MPI_Datatype sendtype, void
 
     for (i = 0; i < p; ++i) {
         if (i != id) {
+            // send buf to all other procs
             ret = MPI_Isend(sendbuf, sendcount, sendtype, i, 0, MPI_COMM_WORLD, &send_requests[i]);
+            // recv buf from all other procs and put in the right place
             ret = MPI_Irecv(recvbuf + (i * recvcount), recvcount, recvtype, i, 0, MPI_COMM_WORLD, &recv_requests[i]);
         } else {
+            // local: copy from send buf to the right place in the recv buf
             MPI_Type_size(recvtype, &type_size);
             memcpy(recvbuf + (i * recvcount), sendbuf, recvcount * type_size);
         }
     }
 
+    // wait for all async send&recv
     for (i = 0; i < p; ++i) {
         if (i != id) {
             ret = MPI_Wait(&send_requests[i], &status[i]);
@@ -46,11 +50,11 @@ int main(int argc, char *argv[]) {
     int id;                /* Process rank */
     int p;                 /* Number of processes */
     int n;                 /* Elements per process (identical) */
-    char* in_buf;
-    char* out_buf;
-    int i;
-    int mode;
-    double elapsed_time;
+    char* in_buf;          /* Receive buffer */
+    char* out_buf;         /* Send buffer */
+    int i;                 /* Loop index */
+    int mode;              /* 0 - MPI_Allgather, 1 - My_Allgather*/
+    double elapsed_time;   /* Elapsed time */
 
     MPI_Init(&argc, &argv);
 
@@ -75,6 +79,7 @@ int main(int argc, char *argv[]) {
         MPI_Finalize();
         exit(1);
     }
+    // fill with some characters
     for (i = 0; i < n; ++i) {
         out_buf[i] = 'a' + id;
     }
@@ -105,7 +110,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (!id) {
-        printf("Total elapsed time: %10.6f\n", elapsed_time);
+        printf("Elapsed time: %10.3f ms\n", elapsed_time * 1000);
         fflush(stdout);
     }
 

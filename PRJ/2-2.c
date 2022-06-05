@@ -9,6 +9,7 @@ void quick_sort(int *arr, int len) {
     int l, r, pivot, tmp;
     if (len <= 1) return;
     
+    // partition
     l = 0;
     r = len - 1;
     pivot = arr[len / 2];
@@ -24,6 +25,7 @@ void quick_sort(int *arr, int len) {
         }
     }
 
+    // allocate tasks
     #pragma omp task default(none) firstprivate(arr, r)
     {
         quick_sort(arr, r + 1);
@@ -35,11 +37,11 @@ void quick_sort(int *arr, int len) {
 }
 
 int main(int argc, char *argv[]) {
-    int tn;
-    int i;
-    int n;
-    int* arr;
-    double elapsed_time;
+    int tn;                 /* Number of threads */
+    int i;                  /* Loop index */
+    int n;                  /* Length of the array */
+    int* arr;               /* The arr to be sorted */
+    double elapsed_time;    /* Elapsed time */
 
     if (argc != 3) {
         printf("Command line: %s <num_threads> <elem_num>\n", argv[0]);
@@ -49,13 +51,14 @@ int main(int argc, char *argv[]) {
     tn = atoi(argv[1]);
     n = atoi(argv[2]);
     omp_set_num_threads(tn);
+    
     srand((unsigned int)time(NULL));
     arr = (int *) malloc(n * sizeof(int));
     if (arr == NULL) {
         printf("Cannot allocate enough memory\n");
         exit(1);
     }
-
+    // generate a random array
     for (i = 0; i < n; ++i) {
         arr[i] = rand();
     }
@@ -83,7 +86,7 @@ int main(int argc, char *argv[]) {
         }
         printf("\n");
     }
-    printf("Elapsed time: %f\n", elapsed_time);
+    printf("Elapsed time: %10.3f ms\n", elapsed_time * 1000);
 
     free(arr);
     return 0;
